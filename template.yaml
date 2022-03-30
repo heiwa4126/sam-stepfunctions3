@@ -1,0 +1,84 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  sam-stepfunctions3
+
+  Sample SAM Template for sam-stepfunctions1a
+  See https://docs.aws.amazon.com/step-functions/latest/dg/tutorial-handling-error-conditions.html
+
+
+Globals:
+  Function:
+    Timeout: 3
+    Runtime: nodejs14.x
+    Architectures:
+      - x86_64
+  Api:
+    OpenApiVersion: 3.0.3
+
+Resources:
+  FailFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: fail/
+      Handler: app.handler
+
+  FailFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    DependsOn: FailFunction
+    Properties:
+      RetentionInDays: 7
+      LogGroupName: !Sub "/aws/lambda/${FailFunction}"
+
+  FailStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      DefinitionUri: statemachine/fail.asl.json
+      DefinitionSubstitutions:
+        FailFunction: !GetAtt FailFunction.Arn
+      Type: STANDARD
+      Logging:
+        Destinations:
+          - CloudWatchLogsLogGroup:
+              LogGroupArn: !GetAtt FailStateMachineLogGroup.Arn
+        IncludeExecutionData: true
+        Level: ALL              # loggingのテスト。普通はERRORで十分
+        # Level: ERROR
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName: !Ref FailFunction
+        - Statement:
+           - Effect: Allow
+             Action:
+               - logs:CreateLogDelivery
+               - logs:GetLogDelivery
+               - logs:UpdateLogDelivery
+               - logs:DeleteLogDelivery
+               - logs:ListLogDeliveries
+               - logs:PutResourcePolicy
+               - logs:DescribeResourcePolicies
+               - logs:DescribeLogGroups
+             # Resource: !GetAtt FailStateMachineLogGroup.Arn
+             Resource: "*"      # ↑を指定すると作成できない。理由不明
+        - Statement:  # これは本当に必要かわからないインラインポリシー。手動で作ったstepfunctionにはあったので
+           - Effect: Allow
+             Action:
+               - xray:PutTraceSegments
+               - xray:PutTelemetryRecords
+               - xray:GetSamplingRules
+               - xray:GetSamplingTargets
+             Resource:
+               - "*"  # 少々甘め
+
+  FailStateMachineLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 7
+      LogGroupName: !Sub
+        - "/aws/vendedlogs/states/${AWS::StackName}-FailStateMachine-${v1}-Log"
+        - {v1: !Select [4, !Split ["-", !Select [2, !Split [/, !Ref AWS::StackId ]]]]}
+
+Outputs:
+  FailFunctionName:
+    Description: "Fail Lambda Function Name"
+    Value: !Ref FailFunction
