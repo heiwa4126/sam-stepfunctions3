@@ -33,7 +33,7 @@ Resources:
   FailStateMachine:
     Type: AWS::Serverless::StateMachine
     Properties:
-      DefinitionUri: statemachine/fail.asl.json
+      DefinitionUri: statemachine/fail.asl.yaml
       DefinitionSubstitutions:
         FailFunction: !GetAtt FailFunction.Arn
       Type: STANDARD
@@ -47,28 +47,8 @@ Resources:
       Policies:
         - LambdaInvokePolicy:
             FunctionName: !Ref FailFunction
-        - Statement:
-           - Effect: Allow
-             Action:
-               - logs:CreateLogDelivery
-               - logs:GetLogDelivery
-               - logs:UpdateLogDelivery
-               - logs:DeleteLogDelivery
-               - logs:ListLogDeliveries
-               - logs:PutResourcePolicy
-               - logs:DescribeResourcePolicies
-               - logs:DescribeLogGroups
-             # Resource: !GetAtt FailStateMachineLogGroup.Arn
-             Resource: "*"      # ↑を指定すると作成できない。理由不明
-        - Statement:  # これは本当に必要かわからないインラインポリシー。手動で作ったstepfunctionにはあったので
-           - Effect: Allow
-             Action:
-               - xray:PutTraceSegments
-               - xray:PutTelemetryRecords
-               - xray:GetSamplingRules
-               - xray:GetSamplingTargets
-             Resource:
-               - "*"  # 少々甘め
+        - !Ref StateMachineLogPolicy
+        - !Ref StateMachineLogPolicy2
 
   FailStateMachineLogGroup:
     Type: AWS::Logs::LogGroup
@@ -77,6 +57,41 @@ Resources:
       LogGroupName: !Sub
         - "/aws/vendedlogs/states/${AWS::StackName}-FailStateMachine-${v1}-Log"
         - {v1: !Select [4, !Split ["-", !Select [2, !Split [/, !Ref AWS::StackId ]]]]}
+
+  StateMachineLogPolicy:
+    # 複数ステートマシンを作るかもしれないので、Policyをまとめてみた
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - logs:CreateLogDelivery
+              - logs:GetLogDelivery
+              - logs:UpdateLogDelivery
+              - logs:DeleteLogDelivery
+              - logs:ListLogDeliveries
+              - logs:PutResourcePolicy
+              - logs:DescribeResourcePolicies
+              - logs:DescribeLogGroups
+            Resource: '*'
+
+  StateMachineLogPolicy2:
+    # 複数ステートマシンを作るかもしれないので、Policyをまとめてみた2
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:  # これは本当に必要かわからないインラインポリシー。手動で作ったstepfunctionにはあったので
+          - Effect: Allow
+            Action:
+              - xray:PutTraceSegments
+              - xray:PutTelemetryRecords
+              - xray:GetSamplingRules
+              - xray:GetSamplingTargets
+            Resource:
+              - "*"  # 少々甘め
 
 Outputs:
   FailFunctionName:
